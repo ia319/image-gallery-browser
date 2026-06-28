@@ -56,5 +56,8 @@ def folder_relative_path_for_image(source_relative_path: str) -> str:
 def _is_within_root(path: Path, root: Path) -> bool:
     normalized_path = os.path.normcase(os.path.abspath(path))
     normalized_root = os.path.normcase(os.path.abspath(root))
-    common = os.path.commonpath([normalized_path, normalized_root])
+    try:
+        common = os.path.commonpath([normalized_path, normalized_root])
+    except ValueError:
+        return False
     return common == normalized_root

@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from image_gallery_browser import paths
 from image_gallery_browser.errors import PathBoundaryError
 from image_gallery_browser.paths import (
     ROOT_RELATIVE_PATH,
@@ -34,6 +35,25 @@ def test_relative_to_root_rejects_outside_path(tmp_path: Path) -> None:
     root.mkdir()
     outside.parent.mkdir()
     outside.touch()
+
+    with pytest.raises(PathBoundaryError):
+        relative_to_root(outside, root)
+
+
+def test_relative_to_root_handles_commonpath_value_error(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    root = tmp_path / "root"
+    outside = tmp_path / "outside" / "image.png"
+    root.mkdir()
+    outside.parent.mkdir()
+    outside.touch()
+
+    def commonpath(_paths: list[str]) -> str:
+        raise ValueError("paths are on different drives")
+
+    monkeypatch.setattr(paths.os.path, "commonpath", commonpath)
 
     with pytest.raises(PathBoundaryError):
         relative_to_root(outside, root)

@@ -43,6 +43,7 @@ def parse_config(raw_config: dict[str, Any], *, base_dir: Path) -> GalleryConfig
         _get_string(raw_config, "projects_root", "sample_projects"), base_dir
     )
     data_dir = resolve_path(_get_string(raw_config, "data_dir", "data"), base_dir)
+    _reject_nested_data_dir(projects_root, data_dir)
     gallery_label = _get_optional_string(raw_config, "gallery_label")
     thumbnail_size = _parse_thumbnail_size(
         raw_config.get("thumbnail_size", DEFAULT_THUMBNAIL_SIZE)
@@ -93,7 +94,7 @@ def _get_bool(raw_config: dict[str, Any], key: str, default: bool) -> bool:
 
 def _get_positive_int(raw_config: dict[str, Any], key: str, default: int) -> int:
     value = raw_config.get(key, default)
-    if not isinstance(value, int) or value <= 0:
+    if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
         raise ConfigError(f"{key} must be a positive integer")
     return value
 
@@ -102,10 +103,22 @@ def _parse_thumbnail_size(value: Any) -> tuple[int, int]:
     if (
         not isinstance(value, list | tuple)
         or len(value) != 2
-        or not all(isinstance(item, int) and item > 0 for item in value)
+        or not all(_is_positive_int(item) for item in value)
     ):
         raise ConfigError("thumbnail_size must contain two positive integers")
     return (value[0], value[1])
+
+
+def _reject_nested_data_dir(projects_root: Path, data_dir: Path) -> None:
+    try:
+        data_dir.relative_to(projects_root)
+    except ValueError:
+        return
+    raise ConfigError("data_dir must be outside projects_root")
+
+
+def _is_positive_int(value: object) -> bool:
+    return not isinstance(value, bool) and isinstance(value, int) and value > 0
 
 
 def _parse_extensions(value: Any) -> frozenset[str]:
