@@ -72,3 +72,17 @@ class ScanSummary:
     @property
     def errors_count(self) -> int:
         return len(self.errors)
+
+
+@dataclass(frozen=True)
+class FilesystemScanResult:
+    """Represent discovered filesystem records before persistence."""
+
+    folders: tuple[FolderRecord, ...] = ()
+    images: tuple[ImageRecord, ...] = ()
+    total_files_seen: int = 0
+    errors: tuple[ScanErrorRecord, ...] = ()
+
+    @property
+    def errors_count(self) -> int:
+        return len(self.errors)
