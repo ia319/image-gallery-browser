@@ -94,14 +94,18 @@ scan runs, and recoverable errors.
 
 - `projects_root`
 - `data_dir`
+- `gallery_label`
 - `thumbnail_size`
 - `supported_extensions`
 - `auto_scan_on_empty`
 - `max_images_per_view`
+- `show_diagnostics`
 
 Relative configuration paths resolve from the configuration file directory.
 Supported extensions normalize to lowercase values with leading dots.
-Thumbnail size requires two positive integers.
+Thumbnail size requires two positive integers. `gallery_label` supplies the
+short public label used by the UI. `show_diagnostics` controls whether resolved
+filesystem paths and raw error messages appear in the Streamlit interface.
 
 ## Path Handling
 
@@ -205,11 +209,23 @@ images, thumbnail paths, source paths, and latest scan metadata.
 
 The sidebar displays:
 
-- configured root path
-- SQLite database path
+- gallery label
+- index status
 - latest scan timestamp and status
 - `Rescan` button
 - search input
+
+The default sidebar displays short public labels only. `Index` status uses the
+latest scan status and the empty-index check:
+
+- `Empty`
+- `Ready`
+- `Ready with errors`
+- `Failed`
+- `Scanning`
+
+When `show_diagnostics` is enabled, the sidebar adds `Configuration details`
+with the resolved root path and SQLite database path.
 
 `render_app()` stores one Streamlit session key for the initial empty-index scan
 attempt. This prevents repeated automatic scans during normal Streamlit reruns.
@@ -228,6 +244,10 @@ dimensions, file size, modified time, and status.
 
 `render_scan_summary()` displays scan counters as metrics and renders
 recoverable errors inside an expander.
+
+Default error rows show only stage, error type, and source-relative path.
+Diagnostic mode also displays the stored error message, which can contain
+operating-system details from lower-level exceptions.
 
 ## SQLite Persistence
 

@@ -14,12 +14,14 @@ class GalleryConfig:
 
     projects_root: Path
     data_dir: Path
+    gallery_label: str | None = None
     thumbnail_size: tuple[int, int] = (320, 320)
     supported_extensions: frozenset[str] = field(
         default_factory=lambda: frozenset({".jpg", ".jpeg", ".png", ".webp"})
     )
     auto_scan_on_empty: bool = True
     max_images_per_view: int = 200
+    show_diagnostics: bool = False
 
 
 @dataclass(frozen=True)

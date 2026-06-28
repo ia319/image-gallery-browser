@@ -17,8 +17,8 @@ def main() -> None:
 
     try:
         config = load_config()
-    except ConfigError as exc:
-        st.error(str(exc))
+    except ConfigError:
+        st.error("Configuration could not be loaded. Check config.example.json.")
         return
 
     with GalleryService(config) as service:

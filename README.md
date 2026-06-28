@@ -30,14 +30,17 @@ network share.
 {
   "projects_root": "sample_projects",
   "data_dir": "data",
+  "gallery_label": "Sample Projects",
   "thumbnail_size": [320, 320],
   "supported_extensions": [".jpg", ".jpeg", ".png", ".webp"],
   "auto_scan_on_empty": true,
-  "max_images_per_view": 200
+  "max_images_per_view": 200,
+  "show_diagnostics": false
 }
 ```
 
 Use `auto_scan_on_empty: false` for large local folders or network shares.
+Keep `show_diagnostics: false` for public deployments and screenshots.
 
 ## Quality Checks
 

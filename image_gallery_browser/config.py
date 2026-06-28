@@ -43,6 +43,7 @@ def parse_config(raw_config: dict[str, Any], *, base_dir: Path) -> GalleryConfig
         _get_string(raw_config, "projects_root", "sample_projects"), base_dir
     )
     data_dir = resolve_path(_get_string(raw_config, "data_dir", "data"), base_dir)
+    gallery_label = _get_optional_string(raw_config, "gallery_label")
     thumbnail_size = _parse_thumbnail_size(
         raw_config.get("thumbnail_size", DEFAULT_THUMBNAIL_SIZE)
     )
@@ -53,14 +54,17 @@ def parse_config(raw_config: dict[str, Any], *, base_dir: Path) -> GalleryConfig
     max_images_per_view = _get_positive_int(
         raw_config, "max_images_per_view", DEFAULT_MAX_IMAGES_PER_VIEW
     )
+    show_diagnostics = _get_bool(raw_config, "show_diagnostics", False)
 
     return GalleryConfig(
         projects_root=projects_root,
         data_dir=data_dir,
+        gallery_label=gallery_label,
         thumbnail_size=thumbnail_size,
         supported_extensions=supported_extensions,
         auto_scan_on_empty=auto_scan_on_empty,
         max_images_per_view=max_images_per_view,
+        show_diagnostics=show_diagnostics,
     )
 
 
@@ -69,6 +73,15 @@ def _get_string(raw_config: dict[str, Any], key: str, default: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ConfigError(f"{key} must be a non-empty string")
     return value
+
+
+def _get_optional_string(raw_config: dict[str, Any], key: str) -> str | None:
+    value = raw_config.get(key)
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ConfigError(f"{key} must be a non-empty string when provided")
+    return value.strip()
 
 
 def _get_bool(raw_config: dict[str, Any], key: str, default: bool) -> bool:
