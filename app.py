@@ -1,13 +1,28 @@
 """Streamlit entry point for Image Gallery Browser."""
 
+from __future__ import annotations
+
+from image_gallery_browser.config import load_config
+from image_gallery_browser.errors import ConfigError
+from image_gallery_browser.services import GalleryService
+from image_gallery_browser.ui import render_app
+
 
 def main() -> None:
-    """Render the initial application shell."""
+    """Render the Streamlit application."""
     import streamlit as st
 
     st.set_page_config(page_title="Image Gallery Browser", layout="wide")
     st.title("Image Gallery Browser")
-    st.info("Project scaffold ready. Implement core modules next.")
+
+    try:
+        config = load_config()
+    except ConfigError as exc:
+        st.error(str(exc))
+        return
+
+    with GalleryService(config) as service:
+        render_app(st, service)
 
 
 if __name__ == "__main__":
