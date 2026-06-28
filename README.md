@@ -47,6 +47,14 @@ Run the local checks before committing changes.
 python -m pytest
 python -m ruff check .
 python -m ruff format --check .
+python scripts/check_links.py
+python scripts/check_text_files.py --staged
+```
+
+Enable the repository hook for automatic checks before each commit.
+
+```powershell
+git config core.hooksPath .githooks
 ```
 
 ## License
