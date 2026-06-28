@@ -36,6 +36,29 @@ def test_scan_gallery_root_discovers_nested_folders_and_images(
     }
 
 
+def test_scan_gallery_root_discovers_deep_nested_images(tmp_path: Path) -> None:
+    root = tmp_path / "gallery"
+    second_level = root / "Project A" / "Renders"
+    archive = second_level / "Archive"
+    archive.mkdir(parents=True)
+    (second_level / "render.png").write_bytes(b"image")
+    (archive / "archived.png").write_bytes(b"image")
+
+    result = scan_gallery_root(root, [".png"])
+
+    assert result.total_files_seen == 2
+    assert {folder.relative_path for folder in result.folders} == {
+        ROOT_RELATIVE_PATH,
+        "Project A",
+        "Project A/Renders",
+        "Project A/Renders/Archive",
+    }
+    assert {image.source_relative_path for image in result.images} == {
+        "Project A/Renders/render.png",
+        "Project A/Renders/Archive/archived.png",
+    }
+
+
 def test_scan_gallery_root_assigns_root_images_to_root_folder(
     tmp_path: Path,
 ) -> None:

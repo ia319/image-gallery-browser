@@ -111,7 +111,7 @@ def _scan_entry(
         errors.append(_build_scan_error(entry, root, ScanErrorType.UNKNOWN_ERROR, exc))
         return 0
 
-    # Avoid following symlinks so recursive scans cannot loop or leave the root.
+    # Avoid following symlinks so directory traversal cannot loop or leave the root.
     if S_ISDIR(path_stat.st_mode):
         try:
             folders.append(_build_folder_record(entry, root))
