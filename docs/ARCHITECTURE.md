@@ -10,8 +10,9 @@ a Streamlit runtime.
 `config.py` loads JSON configuration, applies defaults, and returns a
 normalized `GalleryConfig`.
 
-`app.py` configures the Streamlit page, loads configuration, creates
-`GalleryService`, and delegates rendering to the UI package.
+`app.py` configures the Streamlit page, loads configuration from
+`IMAGE_GALLERY_CONFIG` when present, falls back to the directory containing
+`app.py`, creates `GalleryService`, and delegates rendering to the UI package.
 
 `paths.py` resolves configured paths, converts source paths to POSIX-style
 root-relative paths, validates root boundaries, and detects UNC path strings.
@@ -109,7 +110,7 @@ filesystem paths and raw error messages appear in the Streamlit interface.
 
 ## Path Handling
 
-Source image paths use POSIX separators in records and SQLite rows. Windows
+Source image paths store POSIX separators in records and SQLite rows. Windows
 paths and UNC path strings enter through configuration and filesystem APIs, then
 convert to stable source-relative values.
 
@@ -128,7 +129,7 @@ absolute paths and parent traversal segments before joining with `data_dir`.
 
 ## Filesystem Scan
 
-`scan_gallery_root()` scans the configured root and every child directory. It
+`scan_gallery_root()` scans the configured root and all nested directories. It
 does not depend on folder names.
 
 Each discovered folder produces:
@@ -157,7 +158,7 @@ symlinks. Permission errors, invalid paths, and OS errors become
 orientation, reads dimensions, checks cache freshness, and writes a PNG
 thumbnail when needed.
 
-Thumbnail files use this cache path:
+Thumbnail files follow this cache path:
 
 ```text
 <data_dir>/thumbnails/<sha256(source_relative_path)>.png
@@ -190,9 +191,9 @@ Unexpected persistence exceptions produce failed scans with a `database` stage
 error. Per-image thumbnail and image-open errors remain recoverable and do not
 stop the rest of the scan.
 
-Errored image files keep their source metadata and receive `error` status after
-the associated scan error is stored. A later successful scan restores active
-status through the normal image upsert path.
+Errored image files retain source metadata and receive `error` status after the
+associated scan error is stored. A later successful scan restores active status
+through the normal image upsert path.
 
 `list_images()` fetches one extra row beyond `max_images_per_view` to report
 truncation while returning only the configured display limit.
@@ -200,8 +201,12 @@ truncation while returning only the configured display limit.
 ## Presentation Layer
 
 `app.py` imports Streamlit inside `main()`, sets the page title and layout,
-loads `config.example.json` by default, reports configuration errors in the UI,
-and opens `GalleryService` as a context-managed dependency.
+loads configuration through `load_app_config()`, reports configuration errors in
+the UI, and opens `GalleryService` as a context-managed dependency.
+
+`load_app_config()` reads `IMAGE_GALLERY_CONFIG` first. Relative override paths
+resolve from the shell working directory. When no override exists,
+`config.example.json` resolves from `APP_DIR`.
 
 The UI package receives a Streamlit module object and a `GalleryService`
 instance. Presentation functions call service methods for scans, folders,
@@ -235,8 +240,8 @@ current Streamlit rerun. Other reruns render the latest persisted scan record
 from SQLite. Persisted scan errors load from `scan_errors` when the latest scan
 contains errors.
 
-Folder selection uses labels from `build_folder_options()`. The root folder
-displays as `Root`; child folders use two spaces per depth level.
+Folder selection receives labels from `build_folder_options()`. The root folder
+displays as `Root`; child folder labels indent with two spaces per depth level.
 
 `render_gallery()` lays out thumbnails in four columns. It displays a warning
 when the service reports truncation at `max_images_per_view`. Each thumbnail
@@ -424,7 +429,7 @@ Error types:
 - `database_error`
 - `unknown_error`
 
-Recoverable errors use `ScanErrorRecord` and persist through
+Recoverable errors flow through `ScanErrorRecord` and persist through
 `GalleryDatabase.add_scan_error()`.
 
 ## Test Coverage
@@ -435,7 +440,7 @@ Automated tests cover:
 - root-relative POSIX path conversion
 - root boundary rejection
 - UNC path detection
-- recursive filesystem scanning
+- full nested filesystem scanning
 - root folder image assignment
 - unsupported file filtering
 - recoverable scanner errors
