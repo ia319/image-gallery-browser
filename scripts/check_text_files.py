@@ -37,7 +37,7 @@ def iter_source_files() -> list[Path]:
 
 def iter_staged_files() -> list[Path]:
     result = subprocess.run(
-        ["git", "diff", "--cached", "--name-only", "--diff-filter=ACMR"],
+        ["git", "diff", "--cached", "--name-only", "-z", "--diff-filter=ACMR"],
         check=True,
         cwd=ROOT,
         capture_output=True,
@@ -45,7 +45,9 @@ def iter_staged_files() -> list[Path]:
     )
 
     paths = []
-    for line in result.stdout.splitlines():
+    for line in result.stdout.split("\0"):
+        if not line:
+            continue
         path = ROOT / line
         if path.exists() and path.is_file() and not should_skip(path):
             paths.append(path)
