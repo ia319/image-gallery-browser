@@ -143,6 +143,10 @@ class GalleryService:
         """Return the latest scan metadata for the configured root."""
         return self.database.get_latest_scan(self.root_id)
 
+    def list_scan_errors(self, scan_id: int) -> tuple[ScanErrorRecord, ...]:
+        """Return persisted recoverable errors for one scan."""
+        return self.database.list_scan_errors(scan_id)
+
     def source_path(self, image: ImageRecord) -> Path:
         """Return the absolute source path for an indexed image."""
         return source_image_path(self.config.projects_root, image.source_relative_path)

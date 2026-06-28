@@ -230,6 +230,11 @@ with the resolved root path and SQLite database path.
 `render_app()` stores one Streamlit session key for the initial empty-index scan
 attempt. This prevents repeated automatic scans during normal Streamlit reruns.
 
+Scan metrics render from the current scan result when a scan runs during the
+current Streamlit rerun. Other reruns render the latest persisted scan record
+from SQLite. Persisted scan errors load from `scan_errors` when the latest scan
+contains errors.
+
 Folder selection uses labels from `build_folder_options()`. The root folder
 displays as `Root`; child folders use two spaces per depth level.
 

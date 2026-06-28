@@ -97,6 +97,7 @@ def test_rescan_records_thumbnail_errors_and_continues(tmp_path: Path) -> None:
         assert latest_scan is not None
         assert latest_scan.status == "completed_with_errors"
         assert database.list_scan_errors(latest_scan.id) == summary.errors
+        assert service.list_scan_errors(latest_scan.id) == summary.errors
     finally:
         database.close()
 

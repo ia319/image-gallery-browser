@@ -14,6 +14,7 @@ from image_gallery_browser.ui.gallery import render_gallery
 from image_gallery_browser.ui.preview import render_image_preview
 
 INITIAL_SCAN_KEY = "image_gallery_browser_initial_scan_attempted"
+ScanMetrics = ScanRecord | ScanSummary
 
 
 def render_app(st, service: GalleryService) -> None:
@@ -25,13 +26,16 @@ def render_app(st, service: GalleryService) -> None:
         search = st.text_input("Search", value="")
 
     summary = service.rescan() if rescan_clicked else initial_summary
+    latest_scan = service.latest_scan()
     with st.sidebar:
-        _render_configuration(st, service)
+        _render_configuration(st, service, latest_scan)
 
-    if summary is not None:
+    scan_metrics = summary or latest_scan
+    if scan_metrics is not None:
         render_scan_summary(
             st,
-            summary,
+            scan_metrics,
+            errors=_scan_errors_for_display(summary, latest_scan, service),
             show_diagnostics=service.config.show_diagnostics,
         )
 
@@ -48,26 +52,20 @@ def render_app(st, service: GalleryService) -> None:
 
 def render_scan_summary(
     st,
-    summary: ScanSummary,
+    scan_metrics: ScanMetrics,
     *,
+    errors: tuple[ScanErrorRecord, ...] = (),
     show_diagnostics: bool = False,
 ) -> None:
     """Render aggregate scan counts and recoverable errors."""
     columns = st.columns(6)
-    values = (
-        ("Seen", summary.total_files_seen),
-        ("Added", summary.images_added),
-        ("Updated", summary.images_updated),
-        ("Skipped", summary.images_skipped),
-        ("Missing", summary.images_missing),
-        ("Errors", summary.errors_count),
-    )
+    values = scan_metric_values(scan_metrics)
     for column, (label, value) in zip(columns, values, strict=True):
         column.metric(label, value)
 
-    if summary.errors:
+    if errors:
         with st.expander("Errors", expanded=True):
-            for error in summary.errors:
+            for error in errors:
                 st.code(format_scan_error(error, show_diagnostics=show_diagnostics))
 
 
@@ -78,8 +76,11 @@ def _run_initial_scan_once(st, service: GalleryService) -> ScanSummary | None:
     return service.scan_on_empty()
 
 
-def _render_configuration(st, service: GalleryService) -> None:
-    latest_scan = service.latest_scan()
+def _render_configuration(
+    st,
+    service: GalleryService,
+    latest_scan: ScanRecord | None,
+) -> None:
     is_empty = service.is_empty()
 
     st.caption(f"Gallery: {format_gallery_label(service.config)}")
@@ -90,6 +91,30 @@ def _render_configuration(st, service: GalleryService) -> None:
         with st.expander("Configuration details"):
             st.code(f"Root path: {service.config.projects_root}")
             st.code(f"Database path: {service.database_path}")
+
+
+def _scan_errors_for_display(
+    summary: ScanSummary | None,
+    latest_scan: ScanRecord | None,
+    service: GalleryService,
+) -> tuple[ScanErrorRecord, ...]:
+    if summary is not None:
+        return summary.errors
+    if latest_scan is None or latest_scan.errors_count == 0:
+        return ()
+    return service.list_scan_errors(latest_scan.id)
+
+
+def scan_metric_values(scan_metrics: ScanMetrics) -> tuple[tuple[str, int], ...]:
+    """Return metric labels and values for current or persisted scan data."""
+    return (
+        ("Seen", scan_metrics.total_files_seen),
+        ("Added", scan_metrics.images_added),
+        ("Updated", scan_metrics.images_updated),
+        ("Skipped", scan_metrics.images_skipped),
+        ("Missing", scan_metrics.images_missing),
+        ("Errors", scan_metrics.errors_count),
+    )
 
 
 def format_gallery_label(config: GalleryConfig) -> str:

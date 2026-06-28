@@ -7,6 +7,7 @@ from image_gallery_browser.models import (
     ImageRecord,
     ScanErrorRecord,
     ScanRecord,
+    ScanSummary,
 )
 from image_gallery_browser.paths import ROOT_RELATIVE_PATH
 from image_gallery_browser.ui import (
@@ -14,6 +15,7 @@ from image_gallery_browser.ui import (
     format_index_status,
     format_last_scan,
     format_scan_error,
+    scan_metric_values,
 )
 from image_gallery_browser.ui.folder_tree import build_folder_options
 from image_gallery_browser.ui.gallery import chunk_images
@@ -160,4 +162,55 @@ def test_format_scan_error_hides_message_until_diagnostics_enabled() -> None:
     assert (
         format_scan_error(error, show_diagnostics=True)
         == "scan | unknown_error | root | failed at D:\\private\\gallery\\image.jpg"
+    )
+
+
+def test_scan_metric_values_supports_current_summary() -> None:
+    summary = ScanSummary(
+        total_files_seen=10,
+        images_added=2,
+        images_updated=3,
+        images_skipped=4,
+        images_missing=1,
+        errors=(
+            ScanErrorRecord(
+                stage=ScanStage.SCAN,
+                error_type=ScanErrorType.UNKNOWN_ERROR,
+                relative_path="broken.jpg",
+                message="failed",
+            ),
+        ),
+    )
+
+    assert scan_metric_values(summary) == (
+        ("Seen", 10),
+        ("Added", 2),
+        ("Updated", 3),
+        ("Skipped", 4),
+        ("Missing", 1),
+        ("Errors", 1),
+    )
+
+
+def test_scan_metric_values_supports_persisted_scan_record() -> None:
+    scan_record = ScanRecord(
+        id=1,
+        status="completed_with_errors",
+        started_at="2026-06-29T10:00:00+00:00",
+        finished_at="2026-06-29T10:00:01+00:00",
+        total_files_seen=10,
+        images_added=2,
+        images_updated=3,
+        images_skipped=4,
+        images_missing=1,
+        errors_count=5,
+    )
+
+    assert scan_metric_values(scan_record) == (
+        ("Seen", 10),
+        ("Added", 2),
+        ("Updated", 3),
+        ("Skipped", 4),
+        ("Missing", 1),
+        ("Errors", 5),
     )
