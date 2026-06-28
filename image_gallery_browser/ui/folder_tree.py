@@ -28,12 +28,12 @@ def build_folder_options(folders: Sequence[FolderRecord]) -> tuple[FolderOption,
 def render_folder_selector(st, folders: Sequence[FolderRecord]) -> str:
     """Render a folder selector and return the selected relative path."""
     options = build_folder_options(folders)
-    selected_label = st.selectbox(
+    selected = st.selectbox(
         "Folder",
-        [option.label for option in options],
+        options,
         index=0,
+        format_func=lambda option: option.label,
     )
-    selected = next(option for option in options if option.label == selected_label)
     return selected.relative_path
 
 

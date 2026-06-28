@@ -205,9 +205,10 @@ truncation while returning only the configured display limit.
 
 ## Presentation Layer
 
-`app.py` imports Streamlit inside `main()`, sets the page title and layout,
-loads configuration through `load_app_config()`, reports configuration errors in
-the UI, and opens `GalleryService` as a context-managed dependency.
+`app.py` imports Streamlit inside `main()`, loads configuration through
+`load_app_config()`, sets the page title and header from `gallery_label` when
+present, reports configuration errors in the UI, and opens `GalleryService` as a
+context-managed dependency.
 
 `load_app_config()` reads `IMAGE_GALLERY_CONFIG` first. Relative override paths
 resolve from the shell working directory. When no override exists,
@@ -245,8 +246,10 @@ current Streamlit rerun. Other reruns render the latest persisted scan record
 from SQLite. Persisted scan errors load from `scan_errors` when the latest scan
 contains errors.
 
-Folder selection receives labels from `build_folder_options()`. The root folder
-displays as `Root`; child folder labels indent with two spaces per depth level.
+Folder selection receives option records from `build_folder_options()`. The root
+folder displays as `Root`; child folder labels indent with two spaces per depth
+level. Streamlit displays labels through `format_func` while selections retain
+their source-relative folder paths.
 
 `render_gallery()` lays out thumbnails in four columns. It displays a warning
 when the service reports truncation at `max_images_per_view`. Each thumbnail
@@ -254,8 +257,8 @@ uses a `View` button to request large preview rendering.
 
 `render_image_preview()` uses `st.dialog` when the active Streamlit runtime
 provides it. The fallback renders the same preview content in the page body.
-Preview content includes the source image, source-relative path, filename,
-dimensions, file size, modified time, and status.
+Preview content includes the source image, read-only source-relative path,
+filename, dimensions, file size, modified time, and status.
 
 `render_scan_summary()` displays scan counters as metrics and renders
 recoverable errors inside an expander.
@@ -411,7 +414,8 @@ Rows return in insertion order for a scan.
 include descendant folders by default.
 
 Search filters match filename and source-relative path with escaped SQLite LIKE
-patterns. Dynamic table and key-column interpolation uses internal allowlists.
+patterns. Missing-update SQL uses prebuilt statements for supported table/key
+pairs and validates table/key values before execution.
 
 Missing folder and image handling updates status values instead of deleting
 rows. Non-empty active key sets load into a temporary SQLite table before the
@@ -484,6 +488,9 @@ Automated tests cover:
 - failed scan recording for scanner exceptions
 - bounded image query truncation
 - Streamlit entry configuration loading
+- config-driven Streamlit page title
 - folder selector label generation
+- duplicate folder selector label handling
 - thumbnail grid row chunking
 - preview metadata formatting
+- read-only preview relative path rendering

@@ -27,14 +27,17 @@ def main() -> None:
     """Render the Streamlit application."""
     import streamlit as st
 
-    st.set_page_config(page_title="Image Gallery Browser", layout="wide")
-    st.title("Image Gallery Browser")
-
     try:
         config = load_app_config()
     except ConfigError:
+        st.set_page_config(page_title="Image Gallery Browser", layout="wide")
+        st.title("Image Gallery Browser")
         st.error("Configuration could not be loaded. Check the gallery JSON file.")
         return
+
+    title = config.gallery_label or "Image Gallery Browser"
+    st.set_page_config(page_title=title, layout="wide")
+    st.title(title)
 
     with GalleryService(config) as service:
         render_app(st, service)

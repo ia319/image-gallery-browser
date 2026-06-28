@@ -17,9 +17,16 @@ from image_gallery_browser.ui import (
     format_scan_error,
     scan_metric_values,
 )
-from image_gallery_browser.ui.folder_tree import build_folder_options
+from image_gallery_browser.ui.folder_tree import (
+    build_folder_options,
+    render_folder_selector,
+)
 from image_gallery_browser.ui.gallery import chunk_images
-from image_gallery_browser.ui.preview import format_dimensions, format_file_size
+from image_gallery_browser.ui.preview import (
+    format_dimensions,
+    format_file_size,
+    render_image_preview,
+)
 
 
 def test_build_folder_options_returns_indented_labels() -> None:
@@ -49,6 +56,30 @@ def test_build_folder_options_returns_root_for_empty_index() -> None:
     assert len(options) == 1
     assert options[0].relative_path == ROOT_RELATIVE_PATH
     assert options[0].label == "Root"
+
+
+def test_render_folder_selector_preserves_duplicate_display_labels() -> None:
+    folders = (
+        FolderRecord(ROOT_RELATIVE_PATH, "projects", None, 0),
+        FolderRecord("Project A", "Project A", ROOT_RELATIVE_PATH, 1),
+        FolderRecord("Project A/Renders", "Renders", "Project A", 2),
+        FolderRecord("Project B", "Project B", ROOT_RELATIVE_PATH, 1),
+        FolderRecord("Project B/Renders", "Renders", "Project B", 2),
+    )
+
+    class FakeStreamlit:
+        def selectbox(self, _label, options, *, index=0, format_func=None):
+            self.labels = [format_func(option) for option in options]
+            self.index = index
+            return options[4]
+
+    st = FakeStreamlit()
+
+    selected = render_folder_selector(st, folders)
+
+    assert selected == "Project B/Renders"
+    assert st.labels.count("    Renders") == 2
+    assert st.index == 0
 
 
 def test_chunk_images_splits_rows_by_column_count() -> None:
@@ -81,6 +112,45 @@ def test_preview_format_helpers() -> None:
         format_dimensions(ImageRecord("broken.png", ".", "broken.png", ".png", 1, 1.0))
         == "Unknown"
     )
+
+
+def test_preview_relative_path_field_is_read_only(tmp_path) -> None:
+    image = ImageRecord("render.png", ".", "render.png", ".png", 1536, 1.0, 80, 40)
+
+    class FakeService:
+        def source_path(self, _image):
+            return tmp_path / "missing.png"
+
+    class FakeStreamlit:
+        def __init__(self) -> None:
+            self.text_input_calls = []
+
+        def subheader(self, _value) -> None:
+            return None
+
+        def warning(self, _value) -> None:
+            return None
+
+        def text_input(self, label, **kwargs) -> None:
+            self.text_input_calls.append((label, kwargs))
+
+        def caption(self, _value) -> None:
+            return None
+
+    st = FakeStreamlit()
+
+    render_image_preview(st, FakeService(), image)
+
+    assert st.text_input_calls == [
+        (
+            "Relative path",
+            {
+                "value": "render.png",
+                "key": "relative-path:render.png",
+                "disabled": True,
+            },
+        )
+    ]
 
 
 def test_format_gallery_label_prefers_configured_label(tmp_path) -> None:

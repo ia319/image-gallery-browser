@@ -7,11 +7,15 @@ from pathlib import Path
 from types import TracebackType
 
 from image_gallery_browser.database.queries import (
+    CREATE_TEMP_ACTIVE_KEYS,
+    DELETE_TEMP_ACTIVE_KEYS,
     FAIL_SCAN,
     FINISH_SCAN,
     INSERT_IMAGE,
     INSERT_SCAN_ERROR,
+    INSERT_TEMP_ACTIVE_KEY,
     MARK_IMAGE_ERROR,
+    MARK_MISSING_QUERIES,
     SELECT_FOLDER_ID,
     SELECT_FOLDERS,
     SELECT_IMAGE,
@@ -57,8 +61,6 @@ from image_gallery_browser.models import (
     ScanSummary,
 )
 from image_gallery_browser.paths import ROOT_RELATIVE_PATH
-
-TEMP_ACTIVE_KEYS_TABLE = "temp_active_missing_keys"
 
 
 class GalleryDatabase:
@@ -434,50 +436,24 @@ class GalleryDatabase:
         if key_column not in MISSING_KEY_COLUMNS:
             raise ValueError(f"unsupported missing key: {key_column}")
 
-        params: list[object] = [root_id]
-        exclusion_clause = self._build_missing_exclusion(table, key_column, active_keys)
+        query = MARK_MISSING_QUERIES.get((table, key_column, bool(active_keys)))
+        if query is None:
+            raise ValueError(
+                f"unsupported missing table/key pair: {table}.{key_column}"
+            )
 
         with self.connection:
             if active_keys:
                 self._replace_temp_active_keys(active_keys)
-            cursor = self.connection.execute(
-                f"""
-                UPDATE {table}
-                SET status = 'missing'
-                WHERE root_id = ? AND status != 'missing'
-                {exclusion_clause}
-                """,
-                params,
-            )
+            cursor = self.connection.execute(query, (root_id,))
             if active_keys:
-                self.connection.execute(f"DELETE FROM {TEMP_ACTIVE_KEYS_TABLE}")
+                self.connection.execute(DELETE_TEMP_ACTIVE_KEYS)
         return cursor.rowcount
 
-    def _build_missing_exclusion(
-        self,
-        table: str,
-        key_column: str,
-        active_keys: set[str],
-    ) -> str:
-        if not active_keys:
-            return ""
-        return (
-            " AND NOT EXISTS ("
-            f"SELECT 1 FROM {TEMP_ACTIVE_KEYS_TABLE} "
-            f"WHERE {TEMP_ACTIVE_KEYS_TABLE}.active_key = {table}.{key_column}"
-            ")"
-        )
-
     def _replace_temp_active_keys(self, active_keys: set[str]) -> None:
-        self.connection.execute(
-            f"""
-            CREATE TEMP TABLE IF NOT EXISTS {TEMP_ACTIVE_KEYS_TABLE} (
-                active_key TEXT PRIMARY KEY
-            )
-            """
-        )
-        self.connection.execute(f"DELETE FROM {TEMP_ACTIVE_KEYS_TABLE}")
+        self.connection.execute(CREATE_TEMP_ACTIVE_KEYS)
+        self.connection.execute(DELETE_TEMP_ACTIVE_KEYS)
         self.connection.executemany(
-            f"INSERT INTO {TEMP_ACTIVE_KEYS_TABLE} (active_key) VALUES (?)",
+            INSERT_TEMP_ACTIVE_KEY,
             ((key,) for key in sorted(active_keys)),
         )

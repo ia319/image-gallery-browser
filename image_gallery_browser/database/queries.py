@@ -174,6 +174,54 @@ SET status = 'error', last_seen_scan_id = COALESCE(?, last_seen_scan_id), update
 WHERE root_id = ? AND source_relative_path = ?
 """
 
+TEMP_ACTIVE_KEYS_TABLE = "temp_active_missing_keys"
+
+CREATE_TEMP_ACTIVE_KEYS = """
+CREATE TEMP TABLE IF NOT EXISTS temp_active_missing_keys (
+    active_key TEXT PRIMARY KEY
+)
+"""
+
+DELETE_TEMP_ACTIVE_KEYS = "DELETE FROM temp_active_missing_keys"
+
+INSERT_TEMP_ACTIVE_KEY = """
+INSERT INTO temp_active_missing_keys (active_key)
+VALUES (?)
+"""
+
+MARK_MISSING_QUERIES = {
+    ("folders", "relative_path", False): """
+        UPDATE folders
+        SET status = 'missing'
+        WHERE root_id = ? AND status != 'missing'
+    """,
+    ("folders", "relative_path", True): """
+        UPDATE folders
+        SET status = 'missing'
+        WHERE root_id = ? AND status != 'missing'
+        AND NOT EXISTS (
+            SELECT 1
+            FROM temp_active_missing_keys
+            WHERE temp_active_missing_keys.active_key = folders.relative_path
+        )
+    """,
+    ("images", "source_relative_path", False): """
+        UPDATE images
+        SET status = 'missing'
+        WHERE root_id = ? AND status != 'missing'
+    """,
+    ("images", "source_relative_path", True): """
+        UPDATE images
+        SET status = 'missing'
+        WHERE root_id = ? AND status != 'missing'
+        AND NOT EXISTS (
+            SELECT 1
+            FROM temp_active_missing_keys
+            WHERE temp_active_missing_keys.active_key = images.source_relative_path
+        )
+    """,
+}
+
 
 def build_list_images_query(where_clause: str, limit_clause: str) -> str:
     """Build the image listing query from validated SQL fragments."""

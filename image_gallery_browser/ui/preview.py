@@ -48,6 +48,7 @@ def _render_preview_body(st, service: GalleryService, image: ImageRecord) -> Non
         "Relative path",
         value=image.source_relative_path,
         key=f"relative-path:{image.source_relative_path}",
+        disabled=True,
     )
     st.caption(f"Filename: {image.filename}")
     st.caption(f"Dimensions: {format_dimensions(image)}")
