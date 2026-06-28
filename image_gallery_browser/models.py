@@ -75,6 +75,22 @@ class ScanSummary:
 
 
 @dataclass(frozen=True)
+class ScanRecord:
+    """Represent persisted scan metadata."""
+
+    id: int
+    status: str
+    started_at: str
+    finished_at: str | None
+    total_files_seen: int
+    images_added: int
+    images_updated: int
+    images_skipped: int
+    images_missing: int
+    errors_count: int
+
+
+@dataclass(frozen=True)
 class FilesystemScanResult:
     """Represent discovered filesystem records before persistence."""
 

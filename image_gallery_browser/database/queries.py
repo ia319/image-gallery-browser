@@ -147,6 +147,30 @@ ORDER BY id
 
 SELECT_SCAN_STATUS = "SELECT status FROM scans WHERE id = ?"
 
+SELECT_LATEST_SCAN = """
+SELECT
+    id,
+    status,
+    started_at,
+    finished_at,
+    total_files_seen,
+    images_added,
+    images_updated,
+    images_skipped,
+    images_missing,
+    errors_count
+FROM scans
+WHERE root_id = ?
+ORDER BY id DESC
+LIMIT 1
+"""
+
+MARK_IMAGE_ERROR = """
+UPDATE images
+SET status = 'error', last_seen_scan_id = ?, updated_at = ?
+WHERE root_id = ? AND source_relative_path = ?
+"""
+
 
 def build_list_images_query(where_clause: str, limit_clause: str) -> str:
     """Build the image listing query from validated SQL fragments."""

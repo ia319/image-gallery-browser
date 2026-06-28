@@ -7,7 +7,12 @@ from dataclasses import dataclass
 from typing import Literal
 
 from image_gallery_browser.errors import ScanErrorType, ScanStage
-from image_gallery_browser.models import FolderRecord, ImageRecord, ScanErrorRecord
+from image_gallery_browser.models import (
+    FolderRecord,
+    ImageRecord,
+    ScanErrorRecord,
+    ScanRecord,
+)
 
 ImageUpsertAction = Literal["added", "updated", "skipped"]
 
@@ -72,4 +77,20 @@ def scan_error_record_from_row(row: sqlite3.Row) -> ScanErrorRecord:
         relative_path=row["relative_path"],
         error_type=ScanErrorType(str(row["error_type"])),
         message=str(row["message"]),
+    )
+
+
+def scan_record_from_row(row: sqlite3.Row) -> ScanRecord:
+    """Build scan metadata from a SQLite row."""
+    return ScanRecord(
+        id=int(row["id"]),
+        status=str(row["status"]),
+        started_at=str(row["started_at"]),
+        finished_at=row["finished_at"],
+        total_files_seen=int(row["total_files_seen"]),
+        images_added=int(row["images_added"]),
+        images_updated=int(row["images_updated"]),
+        images_skipped=int(row["images_skipped"]),
+        images_missing=int(row["images_missing"]),
+        errors_count=int(row["errors_count"]),
     )

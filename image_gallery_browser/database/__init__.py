@@ -11,9 +11,11 @@ from image_gallery_browser.database.queries import (
     FINISH_SCAN,
     INSERT_IMAGE,
     INSERT_SCAN_ERROR,
+    MARK_IMAGE_ERROR,
     SELECT_FOLDER_ID,
     SELECT_FOLDERS,
     SELECT_IMAGE,
+    SELECT_LATEST_SCAN,
     SELECT_ROOT_ID,
     SELECT_SCAN_ERRORS,
     SELECT_SCAN_STATUS,
@@ -30,6 +32,7 @@ from image_gallery_browser.database.records import (
     image_record_from_row,
     image_upsert_action,
     scan_error_record_from_row,
+    scan_record_from_row,
 )
 from image_gallery_browser.database.schema import (
     APPLICATION_TABLES,
@@ -50,6 +53,7 @@ from image_gallery_browser.models import (
     FolderRecord,
     ImageRecord,
     ScanErrorRecord,
+    ScanRecord,
     ScanSummary,
 )
 from image_gallery_browser.paths import ROOT_RELATIVE_PATH
@@ -207,6 +211,20 @@ class GalleryDatabase:
             active_keys=active_source_relative_paths,
         )
 
+    def mark_image_error(
+        self,
+        root_id: int,
+        source_relative_path: str,
+        scan_id: int | None = None,
+    ) -> int:
+        """Mark one seen image as errored without deleting metadata."""
+        with self.connection:
+            cursor = self.connection.execute(
+                MARK_IMAGE_ERROR,
+                (scan_id, utc_now(), root_id, source_relative_path),
+            )
+        return cursor.rowcount
+
     def list_folders(
         self,
         root_id: int,
@@ -344,6 +362,16 @@ class GalleryDatabase:
         if row is None:
             return None
         return str(row["status"])
+
+    def get_latest_scan(self, root_id: int) -> ScanRecord | None:
+        """Return the newest scan metadata for one root."""
+        row = self.connection.execute(
+            SELECT_LATEST_SCAN,
+            (root_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return scan_record_from_row(row)
 
     def count_rows(self, table_name: str) -> int:
         """Return a row count for a known application table."""
