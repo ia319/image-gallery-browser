@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import tempfile
 from dataclasses import dataclass, replace
 from pathlib import Path, PurePosixPath
 
@@ -46,7 +47,10 @@ def process_image_thumbnail(
             exc,
         )
 
-    thumbnail_relative = thumbnail_relative_path(image.source_relative_path)
+    thumbnail_relative = thumbnail_relative_path(
+        image.source_relative_path,
+        thumbnail_size,
+    )
     thumbnail_path = thumbnail_cache_path(data_dir, thumbnail_relative)
 
     loaded_image_result = _load_image(source_path, image.source_relative_path)
@@ -90,17 +94,26 @@ def read_image_size(source_path: str | Path) -> tuple[int, int]:
         image.close()
 
 
-def thumbnail_cache_key(source_relative_path: str) -> str:
+def thumbnail_cache_key(
+    source_relative_path: str,
+    thumbnail_size: tuple[int, int],
+) -> str:
     """Return a stable cache key for a source-relative image path."""
     normalized = _normalize_source_relative_path(source_relative_path)
-    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+    width, height = _validate_thumbnail_size(thumbnail_size)
+    cache_input = f"{normalized}|{width}x{height}"
+    return hashlib.sha256(cache_input.encode("utf-8")).hexdigest()
 
 
-def thumbnail_relative_path(source_relative_path: str) -> str:
+def thumbnail_relative_path(
+    source_relative_path: str,
+    thumbnail_size: tuple[int, int],
+) -> str:
     """Return the POSIX relative thumbnail cache path for one image."""
     return (
         f"{THUMBNAIL_DIR_NAME}/"
-        f"{thumbnail_cache_key(source_relative_path)}{THUMBNAIL_EXTENSION}"
+        f"{thumbnail_cache_key(source_relative_path, thumbnail_size)}"
+        f"{THUMBNAIL_EXTENSION}"
     )
 
 
@@ -178,12 +191,32 @@ def _write_thumbnail(
 ) -> None:
     width, height = _validate_thumbnail_size(thumbnail_size)
     thumbnail_path.parent.mkdir(parents=True, exist_ok=True)
+    temp_path = _temporary_thumbnail_path(thumbnail_path)
     thumbnail = _png_compatible_image(image)
     try:
         thumbnail.thumbnail((width, height), Image.Resampling.LANCZOS)
-        thumbnail.save(thumbnail_path, format=THUMBNAIL_FORMAT)
+        thumbnail.save(temp_path, format=THUMBNAIL_FORMAT)
+        temp_path.replace(thumbnail_path)
     finally:
         thumbnail.close()
+        _remove_temporary_thumbnail(temp_path)
+
+
+def _temporary_thumbnail_path(thumbnail_path: Path) -> Path:
+    with tempfile.NamedTemporaryFile(
+        prefix=f".{thumbnail_path.stem}-",
+        suffix=".tmp",
+        dir=thumbnail_path.parent,
+        delete=False,
+    ) as temp_file:
+        return Path(temp_file.name)
+
+
+def _remove_temporary_thumbnail(temp_path: Path) -> None:
+    try:
+        temp_path.unlink()
+    except OSError:
+        return
 
 
 def _png_compatible_image(image: Image.Image) -> Image.Image:

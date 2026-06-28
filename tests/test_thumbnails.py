@@ -16,12 +16,19 @@ from image_gallery_browser.thumbnails import (
 
 
 def test_thumbnail_relative_path_uses_source_path_hash() -> None:
-    first = thumbnail_relative_path("Project A/render.png")
-    second = thumbnail_relative_path("Project B/render.png")
+    first = thumbnail_relative_path("Project A/render.png", (320, 320))
+    second = thumbnail_relative_path("Project B/render.png", (320, 320))
 
     assert first != second
     assert first.startswith(f"{THUMBNAIL_DIR_NAME}/")
     assert first.endswith(".png")
+
+
+def test_thumbnail_relative_path_includes_thumbnail_size() -> None:
+    first = thumbnail_relative_path("Project A/render.png", (320, 320))
+    second = thumbnail_relative_path("Project A/render.png", (640, 640))
+
+    assert first != second
 
 
 def test_process_image_thumbnail_generates_cache_and_updates_record(
@@ -79,6 +86,31 @@ def test_process_image_thumbnail_reuses_valid_cache(tmp_path: Path) -> None:
     assert thumbnail_path.stat().st_mtime == first_modified_time
 
 
+def test_process_image_thumbnail_regenerates_after_size_change(
+    tmp_path: Path,
+) -> None:
+    projects_root = tmp_path / "projects"
+    data_dir = tmp_path / "data"
+    source_path = projects_root / "render.png"
+    _save_image(source_path, "PNG", size=(80, 60))
+    os.utime(source_path, (1_700_000_000, 1_700_000_000))
+    image = _image_record("render.png", source_path)
+
+    first = process_image_thumbnail(image, projects_root, data_dir, (40, 40))
+    second = process_image_thumbnail(image, projects_root, data_dir, (20, 20))
+
+    assert first.image is not None
+    assert second.image is not None
+    assert second.generated is True
+    assert second.image.thumbnail_relative_path != first.image.thumbnail_relative_path
+    thumbnail_path = thumbnail_cache_path(
+        data_dir, second.image.thumbnail_relative_path
+    )
+    with Image.open(thumbnail_path) as thumbnail:
+        assert thumbnail.width <= 20
+        assert thumbnail.height <= 20
+
+
 def test_process_image_thumbnail_reports_corrupt_image(tmp_path: Path) -> None:
     projects_root = tmp_path / "projects"
     data_dir = tmp_path / "data"
@@ -133,6 +165,31 @@ def test_process_image_thumbnail_reports_thumbnail_write_failure(
     assert result.error is not None
     assert result.error.stage == ScanStage.THUMBNAIL
     assert result.error.error_type == ScanErrorType.THUMBNAIL_FAILED
+
+
+def test_process_image_thumbnail_does_not_leave_final_file_on_write_failure(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    projects_root = tmp_path / "projects"
+    data_dir = tmp_path / "data"
+    source_path = projects_root / "render.png"
+    _save_image(source_path, "PNG", size=(80, 60))
+    image = _image_record("render.png", source_path)
+    thumbnail_relative = thumbnail_relative_path("render.png", (32, 32))
+    thumbnail_path = thumbnail_cache_path(data_dir, thumbnail_relative)
+
+    def fail_save(self, fp, *args, **kwargs) -> None:
+        raise OSError("save failed")
+
+    monkeypatch.setattr(Image.Image, "save", fail_save)
+
+    result = process_image_thumbnail(image, projects_root, data_dir, (32, 32))
+
+    assert result.image is None
+    assert result.error is not None
+    assert not thumbnail_path.exists()
+    assert list(thumbnail_path.parent.glob("*.tmp")) == []
 
 
 @pytest.mark.parametrize(
