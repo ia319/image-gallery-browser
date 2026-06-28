@@ -10,6 +10,9 @@ a Streamlit runtime.
 `config.py` loads JSON configuration, applies defaults, and returns a
 normalized `GalleryConfig`.
 
+`app.py` configures the Streamlit page, loads configuration, creates
+`GalleryService`, and delegates rendering to the UI package.
+
 `paths.py` resolves configured paths, converts source paths to POSIX-style
 root-relative paths, validates root boundaries, and detects UNC path strings.
 
@@ -46,6 +49,19 @@ image upsert results.
 normalizes root paths, hashes root paths, formats timestamps, and escapes LIKE
 patterns.
 
+`ui/__init__.py` renders the main Streamlit page, runs the initial empty-index
+scan once per Streamlit session, handles the `Rescan` action, and displays scan
+summary metrics.
+
+`ui/folder_tree.py` builds indented folder labels and renders the folder
+selector.
+
+`ui/gallery.py` renders the bounded thumbnail grid and returns the selected
+image from a `View` button.
+
+`ui/preview.py` renders large image preview content, metadata, and the
+source-relative path field.
+
 ## Data Flow
 
 ```mermaid
@@ -63,6 +79,7 @@ flowchart LR
   G --> J
   J --> I
   I --> K["ScanSummary and image query results"]
+  K --> L["Streamlit presentation"]
 ```
 
 Configuration produces normalized root and data paths. `GalleryService` creates
@@ -175,6 +192,42 @@ status through the normal image upsert path.
 
 `list_images()` fetches one extra row beyond `max_images_per_view` to report
 truncation while returning only the configured display limit.
+
+## Presentation Layer
+
+`app.py` imports Streamlit inside `main()`, sets the page title and layout,
+loads `config.example.json` by default, reports configuration errors in the UI,
+and opens `GalleryService` as a context-managed dependency.
+
+The UI package receives a Streamlit module object and a `GalleryService`
+instance. Presentation functions call service methods for scans, folders,
+images, thumbnail paths, source paths, and latest scan metadata.
+
+The sidebar displays:
+
+- configured root path
+- SQLite database path
+- latest scan timestamp and status
+- `Rescan` button
+- search input
+
+`render_app()` stores one Streamlit session key for the initial empty-index scan
+attempt. This prevents repeated automatic scans during normal Streamlit reruns.
+
+Folder selection uses labels from `build_folder_options()`. The root folder
+displays as `Root`; child folders use two spaces per depth level.
+
+`render_gallery()` lays out thumbnails in four columns. It displays a warning
+when the service reports truncation at `max_images_per_view`. Each thumbnail
+uses a `View` button to request large preview rendering.
+
+`render_image_preview()` uses `st.dialog` when the active Streamlit runtime
+provides it. The fallback renders the same preview content in the page body.
+Preview content includes the source image, source-relative path, filename,
+dimensions, file size, modified time, and status.
+
+`render_scan_summary()` displays scan counters as metrics and renders
+recoverable errors inside an expander.
 
 ## SQLite Persistence
 
@@ -381,3 +434,7 @@ Automated tests cover:
 - recoverable per-image error persistence
 - failed scan recording for scanner exceptions
 - bounded image query truncation
+- Streamlit entry configuration loading
+- folder selector label generation
+- thumbnail grid row chunking
+- preview metadata formatting
