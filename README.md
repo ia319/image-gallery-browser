@@ -96,6 +96,10 @@ Absolute path or UNC share configuration for Windows Server deployments:
 Set `gallery_label` for public deployments. Set `show_diagnostics` to
 `false` for shared screens, hosted demos, and public access.
 
+Set `data_dir` outside `projects_root`. Configuration loading rejects nested
+data directories so generated thumbnails and SQLite files cannot be scanned as
+source images.
+
 ## Sample Data
 
 `sample_projects/` supports local checks and screenshots. The sample folder
@@ -111,8 +115,9 @@ Run `Rescan` in the sidebar after changing sample files.
 default.
 
 `data/thumbnails/` stores PNG thumbnails named from SHA-256 hashes of
-source-relative paths. Same-named files in different folders receive different
-thumbnail files.
+source-relative paths and configured thumbnail size. Same-named files in
+different folders receive different thumbnail files. Thumbnail size changes
+create separate cache files.
 
 Git ignores runtime data under `data/`.
 

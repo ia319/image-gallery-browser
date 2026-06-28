@@ -104,9 +104,11 @@ scan runs, and recoverable errors.
 
 Relative configuration paths resolve from the configuration file directory.
 Supported extensions normalize to lowercase values with leading dots.
-Thumbnail size requires two positive integers. `gallery_label` supplies the
-short public label used by the UI. `show_diagnostics` controls whether resolved
-filesystem paths and raw error messages appear in the Streamlit interface.
+Thumbnail size requires two positive integers, and integer validators reject
+booleans. `data_dir` must resolve outside `projects_root`. `gallery_label`
+supplies the short public label used by the UI. `show_diagnostics` controls
+whether resolved filesystem paths and raw error messages appear in the
+Streamlit interface.
 
 ## Path Handling
 
@@ -161,14 +163,17 @@ thumbnail when needed.
 Thumbnail files follow this cache path:
 
 ```text
-<data_dir>/thumbnails/<sha256(source_relative_path)>.png
+<data_dir>/thumbnails/<sha256(source_relative_path|widthxheight)>.png
 ```
 
-The hash input uses the source-relative POSIX path. Same-named files in
-different folders produce different thumbnail filenames.
+The hash input combines the source-relative POSIX path and configured thumbnail
+size. Same-named files in different folders produce different thumbnail
+filenames. Different thumbnail sizes produce different thumbnail filenames.
 
 Cache reuse compares thumbnail modified time with source image modified time.
-Thumbnail writes stay under `data_dir`.
+Thumbnail writes stay under `data_dir`. Writes target a temporary file in the
+thumbnail directory first, then atomically replace the final cache file after a
+successful Pillow save.
 
 Image open failures map to `image_open` errors. Thumbnail generation and write
 failures map to `thumbnail` errors.
@@ -293,6 +298,9 @@ Constraint:
 
 `root_path_hash` uses SHA-256 over the normalized root path.
 
+`upsert_root()` preserves an existing `root_label` when the caller omits
+`root_label`. An explicit `root_label` replaces the stored value.
+
 ### `folders`
 
 Fields:
@@ -351,8 +359,10 @@ Statuses:
 uses folder id, file size, modified time, dimensions, thumbnail path, and active
 status.
 
+`upsert_image()` preserves `last_seen_scan_id` when `scan_id` is omitted.
+
 `mark_image_error()` sets `error` status for a seen image without deleting its
-metadata.
+metadata and preserves `last_seen_scan_id` when `scan_id` is omitted.
 
 ### `scans`
 
@@ -404,7 +414,8 @@ Search filters match filename and source-relative path with escaped SQLite LIKE
 patterns. Dynamic table and key-column interpolation uses internal allowlists.
 
 Missing folder and image handling updates status values instead of deleting
-rows.
+rows. Non-empty active key sets load into a temporary SQLite table before the
+missing update, avoiding a large `NOT IN` parameter list.
 
 `GalleryService.list_images()` applies `max_images_per_view` and reports whether
 additional matching rows exist.
@@ -437,8 +448,11 @@ Recoverable errors flow through `ScanErrorRecord` and persist through
 Automated tests cover:
 
 - configuration defaults and validation
+- configuration data directory boundary rejection
+- boolean rejection for integer configuration fields
 - root-relative POSIX path conversion
 - root boundary rejection
+- cross-drive path boundary errors
 - UNC path detection
 - full nested filesystem scanning
 - root folder image assignment
@@ -446,13 +460,18 @@ Automated tests cover:
 - recoverable scanner errors
 - SQLite schema initialization
 - root hash deduplication
+- root label preservation
 - folder and image upsert behavior
+- non-scan image upsert scan id preservation
 - missing folder and image marking
+- large active set missing marking
 - descendant folder image queries
 - scan status and scan error persistence
 - latest scan metadata reads
 - thumbnail hash naming
+- thumbnail size-specific cache naming
 - thumbnail cache reuse
+- atomic thumbnail writes
 - corrupt image handling
 - thumbnail write failure handling
 - invalid source-relative image paths
