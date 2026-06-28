@@ -1,0 +1,13 @@
+# Direct dependency versions selected from PyPI metadata on 2026-06-28.
+# Keep every direct and transitive package version outside the latest 14-day window.
+streamlit==1.58.0
+pillow==12.2.0
+pytest==9.0.3
+ruff==0.15.17
+
+# Transitive constraints selected to avoid package versions released within 14 days.
+altair==6.2.1
+click==8.4.1
+anyio==4.13.0
+certifi==2026.5.20
+numpy==2.4.1
