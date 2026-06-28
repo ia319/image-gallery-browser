@@ -1,9 +1,9 @@
 # Architecture
 
 Image Gallery Browser keeps filesystem discovery, image processing, SQLite
-persistence, path handling, and presentation entry code in separate modules.
-Core modules exchange typed dataclass records and run without a Streamlit
-runtime.
+persistence, scan orchestration, path handling, and presentation entry code in
+separate modules. Core modules exchange typed dataclass records and run without
+a Streamlit runtime.
 
 ## Module Responsibilities
 
@@ -15,7 +15,7 @@ root-relative paths, validates root boundaries, and detects UNC path strings.
 
 `models.py` defines immutable records shared across modules, including
 `GalleryConfig`, `FolderRecord`, `ImageRecord`, `ScanErrorRecord`,
-`ScanSummary`, and `FilesystemScanResult`.
+`ScanSummary`, `ScanRecord`, and `FilesystemScanResult`.
 
 `errors.py` defines stable scan stages and error categories.
 
@@ -25,6 +25,10 @@ image files, and returns recoverable filesystem errors.
 `thumbnails.py` opens images with Pillow, applies EXIF orientation, reads image
 dimensions, generates cached thumbnails, and returns updated `ImageRecord`
 values.
+
+`services.py` coordinates root identity, empty-index scan checks, manual
+rescans, thumbnail processing, SQLite writes, missing record marking, and
+bounded image reads.
 
 `database/__init__.py` exposes `GalleryDatabase` and coordinates schema
 initialization, root upsert, folder upsert, image upsert, missing status
@@ -47,22 +51,25 @@ patterns.
 ```mermaid
 flowchart LR
   A["Configuration"] --> B["Path normalization"]
-  B --> C["Filesystem scan"]
-  C --> D["FolderRecord"]
-  C --> E["ImageRecord"]
-  E --> F["Thumbnail processing"]
-  F --> G["ImageRecord with dimensions"]
-  D --> H["SQLite persistence"]
-  G --> H
-  C --> I["ScanErrorRecord"]
-  F --> I
-  I --> H
+  B --> C["GalleryService"]
+  C --> D["Filesystem scan"]
+  D --> E["FolderRecord"]
+  D --> F["ImageRecord"]
+  F --> G["Thumbnail processing"]
+  G --> H["ImageRecord with dimensions"]
+  E --> I["SQLite persistence"]
+  H --> I
+  D --> J["ScanErrorRecord"]
+  G --> J
+  J --> I
+  I --> K["ScanSummary and image query results"]
 ```
 
-Configuration produces normalized root and data paths. The scanner returns
-folder records, image records, and scan errors. Thumbnail processing enriches
-image records with dimensions and thumbnail paths. SQLite persistence stores
-roots, folders, images, scan runs, and recoverable errors.
+Configuration produces normalized root and data paths. `GalleryService` creates
+or reuses the configured root record, runs scans, enriches discovered images
+through thumbnail processing, writes scan outputs, and returns bounded read
+results for presentation code. SQLite persistence stores roots, folders, images,
+scan runs, and recoverable errors.
 
 ## Configuration
 
@@ -143,6 +150,31 @@ Thumbnail writes stay under `data_dir`.
 
 Image open failures map to `image_open` errors. Thumbnail generation and write
 failures map to `thumbnail` errors.
+
+## Scan Orchestration
+
+`GalleryService` owns the application-level workflow around scanning and reads.
+It uses `<data_dir>/gallery.sqlite3` as the default database path.
+
+`scan_on_empty()` runs a scan only when `auto_scan_on_empty` is enabled and the
+configured root has no indexed folders or images.
+
+`rescan()` creates a running scan row, calls the filesystem scanner, processes
+each discovered image through the thumbnail module, persists folders and images,
+marks absent images and folders as missing, stores recoverable errors, and
+finishes the scan with aggregate counts.
+
+Unexpected scanner exceptions produce failed scans with a `scan` stage error.
+Unexpected persistence exceptions produce failed scans with a `database` stage
+error. Per-image thumbnail and image-open errors remain recoverable and do not
+stop the rest of the scan.
+
+Errored image files keep their source metadata and receive `error` status after
+the associated scan error is stored. A later successful scan restores active
+status through the normal image upsert path.
+
+`list_images()` fetches one extra row beyond `max_images_per_view` to report
+truncation while returning only the configured display limit.
 
 ## SQLite Persistence
 
@@ -236,6 +268,9 @@ Statuses:
 uses folder id, file size, modified time, dimensions, thumbnail path, and active
 status.
 
+`mark_image_error()` sets `error` status for a seen image without deleting its
+metadata.
+
 ### `scans`
 
 Fields:
@@ -273,6 +308,8 @@ Fields:
 
 Rows return in insertion order for a scan.
 
+`get_latest_scan()` returns the newest scan metadata for the configured root.
+
 ## Query Behavior
 
 `list_folders()` returns folders ordered by hierarchy depth and relative path.
@@ -285,6 +322,9 @@ patterns. Dynamic table and key-column interpolation uses internal allowlists.
 
 Missing folder and image handling updates status values instead of deleting
 rows.
+
+`GalleryService.list_images()` applies `max_images_per_view` and reports whether
+additional matching rows exist.
 
 ## Error Taxonomy
 
@@ -327,9 +367,17 @@ Automated tests cover:
 - missing folder and image marking
 - descendant folder image queries
 - scan status and scan error persistence
+- latest scan metadata reads
 - thumbnail hash naming
 - thumbnail cache reuse
 - corrupt image handling
 - thumbnail write failure handling
 - invalid source-relative image paths
 - JPG, JPEG, PNG, and WebP thumbnail processing
+- empty-index automatic scan checks
+- scan orchestration across scanner, thumbnails, and SQLite
+- unchanged image skip accounting
+- missing image accounting
+- recoverable per-image error persistence
+- failed scan recording for scanner exceptions
+- bounded image query truncation
