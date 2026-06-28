@@ -15,7 +15,10 @@ VALUES (?, ?, ?, ?, ?, ?)
 ON CONFLICT(root_path_hash) DO UPDATE SET
     name = excluded.name,
     root_path = excluded.root_path,
-    root_label = excluded.root_label,
+    root_label = CASE
+        WHEN ? THEN excluded.root_label
+        ELSE roots.root_label
+    END,
     updated_at = excluded.updated_at
 """
 
@@ -80,7 +83,7 @@ SET
     height = ?,
     thumbnail_relative_path = ?,
     status = 'active',
-    last_seen_scan_id = ?,
+    last_seen_scan_id = COALESCE(?, last_seen_scan_id),
     updated_at = CASE
         WHEN ? = 'skipped' THEN updated_at
         ELSE ?
@@ -167,7 +170,7 @@ LIMIT 1
 
 MARK_IMAGE_ERROR = """
 UPDATE images
-SET status = 'error', last_seen_scan_id = ?, updated_at = ?
+SET status = 'error', last_seen_scan_id = COALESCE(?, last_seen_scan_id), updated_at = ?
 WHERE root_id = ? AND source_relative_path = ?
 """
 

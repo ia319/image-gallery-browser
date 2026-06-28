@@ -58,6 +58,8 @@ from image_gallery_browser.models import (
 )
 from image_gallery_browser.paths import ROOT_RELATIVE_PATH
 
+TEMP_ACTIVE_KEYS_TABLE = "temp_active_missing_keys"
+
 
 class GalleryDatabase:
     """Manage SQLite schema, writes, and read queries."""
@@ -98,14 +100,25 @@ class GalleryDatabase:
         """Insert or update a gallery root and return its id."""
         normalized_path = normalize_root_path(root_path)
         normalized_hash = root_path_hash(normalized_path)
-        label = root_label or default_root_label(normalized_path)
+        has_explicit_label = root_label is not None
+        label = (
+            root_label if has_explicit_label else default_root_label(normalized_path)
+        )
         name = root_name(normalized_path)
         now = utc_now()
 
         with self.connection:
             self.connection.execute(
                 UPSERT_ROOT,
-                (name, normalized_path, normalized_hash, label, now, now),
+                (
+                    name,
+                    normalized_path,
+                    normalized_hash,
+                    label,
+                    now,
+                    now,
+                    has_explicit_label,
+                ),
             )
 
         return self._require_root_id(normalized_hash)
@@ -422,13 +435,11 @@ class GalleryDatabase:
             raise ValueError(f"unsupported missing key: {key_column}")
 
         params: list[object] = [root_id]
-        exclusion_clause = ""
-        if active_keys:
-            placeholders = ", ".join("?" for _ in active_keys)
-            exclusion_clause = f" AND {key_column} NOT IN ({placeholders})"
-            params.extend(sorted(active_keys))
+        exclusion_clause = self._build_missing_exclusion(table, key_column, active_keys)
 
         with self.connection:
+            if active_keys:
+                self._replace_temp_active_keys(active_keys)
             cursor = self.connection.execute(
                 f"""
                 UPDATE {table}
@@ -438,4 +449,35 @@ class GalleryDatabase:
                 """,
                 params,
             )
+            if active_keys:
+                self.connection.execute(f"DELETE FROM {TEMP_ACTIVE_KEYS_TABLE}")
         return cursor.rowcount
+
+    def _build_missing_exclusion(
+        self,
+        table: str,
+        key_column: str,
+        active_keys: set[str],
+    ) -> str:
+        if not active_keys:
+            return ""
+        return (
+            " AND NOT EXISTS ("
+            f"SELECT 1 FROM {TEMP_ACTIVE_KEYS_TABLE} "
+            f"WHERE {TEMP_ACTIVE_KEYS_TABLE}.active_key = {table}.{key_column}"
+            ")"
+        )
+
+    def _replace_temp_active_keys(self, active_keys: set[str]) -> None:
+        self.connection.execute(
+            f"""
+            CREATE TEMP TABLE IF NOT EXISTS {TEMP_ACTIVE_KEYS_TABLE} (
+                active_key TEXT PRIMARY KEY
+            )
+            """
+        )
+        self.connection.execute(f"DELETE FROM {TEMP_ACTIVE_KEYS_TABLE}")
+        self.connection.executemany(
+            f"INSERT INTO {TEMP_ACTIVE_KEYS_TABLE} (active_key) VALUES (?)",
+            ((key,) for key in sorted(active_keys)),
+        )

@@ -35,6 +35,37 @@ def test_upsert_root_deduplicates_by_normalized_hash(tmp_path: Path) -> None:
         assert root_path_hash(root) == root_path_hash(root.resolve())
 
 
+def test_upsert_root_preserves_label_when_omitted(tmp_path: Path) -> None:
+    root = tmp_path / "gallery"
+    root.mkdir()
+
+    with GalleryDatabase(tmp_path / "gallery.sqlite") as database:
+        root_id = database.upsert_root(root, root_label="Custom Gallery")
+        same_root_id = database.upsert_root(root)
+        label = database.connection.execute(
+            "SELECT root_label FROM roots WHERE id = ?",
+            (root_id,),
+        ).fetchone()["root_label"]
+
+        assert same_root_id == root_id
+        assert label == "Custom Gallery"
+
+
+def test_upsert_root_replaces_explicit_label(tmp_path: Path) -> None:
+    root = tmp_path / "gallery"
+    root.mkdir()
+
+    with GalleryDatabase(tmp_path / "gallery.sqlite") as database:
+        root_id = database.upsert_root(root, root_label="Custom Gallery")
+        database.upsert_root(root, root_label="Renamed Gallery")
+        label = database.connection.execute(
+            "SELECT root_label FROM roots WHERE id = ?",
+            (root_id,),
+        ).fetchone()["root_label"]
+
+        assert label == "Renamed Gallery"
+
+
 def test_upsert_folder_and_image_deduplicates_source_path(tmp_path: Path) -> None:
     with GalleryDatabase(tmp_path / "gallery.sqlite") as database:
         root_id = database.upsert_root(tmp_path / "gallery")
@@ -86,6 +117,28 @@ def test_upsert_folder_and_image_deduplicates_source_path(tmp_path: Path) -> Non
         assert images[0].modified_time == 2.0
 
 
+def test_upsert_image_preserves_last_seen_scan_id_when_scan_omitted(
+    tmp_path: Path,
+) -> None:
+    with GalleryDatabase(tmp_path / "gallery.sqlite") as database:
+        root_id = database.upsert_root(tmp_path / "gallery")
+        database.upsert_folder(
+            root_id,
+            FolderRecord(ROOT_RELATIVE_PATH, "gallery", None, 0),
+        )
+        image = ImageRecord("render.png", ".", "render.png", ".png", 1, 1.0)
+        scan_id = database.start_scan(root_id)
+
+        image_id = database.upsert_image(root_id, image, scan_id).image_id
+        database.upsert_image(root_id, image)
+        last_seen_scan_id = database.connection.execute(
+            "SELECT last_seen_scan_id FROM images WHERE id = ?",
+            (image_id,),
+        ).fetchone()["last_seen_scan_id"]
+
+        assert last_seen_scan_id == scan_id
+
+
 def test_mark_missing_images_and_folders_preserves_rows(tmp_path: Path) -> None:
     with GalleryDatabase(tmp_path / "gallery.sqlite") as database:
         root_id = database.upsert_root(tmp_path / "gallery")
@@ -134,6 +187,42 @@ def test_mark_missing_images_and_folders_preserves_rows(tmp_path: Path) -> None:
             folder.relative_path
             for folder in database.list_folders(root_id, status="missing")
         ] == ["Other"]
+
+
+def test_mark_missing_images_handles_large_active_sets(tmp_path: Path) -> None:
+    with GalleryDatabase(tmp_path / "gallery.sqlite") as database:
+        root_id = database.upsert_root(tmp_path / "gallery")
+        database.upsert_folder(
+            root_id,
+            FolderRecord(ROOT_RELATIVE_PATH, "gallery", None, 0),
+        )
+        active_paths = set()
+        for index in range(1100):
+            source_relative_path = f"image-{index}.png"
+            active_paths.add(source_relative_path)
+            database.upsert_image(
+                root_id,
+                ImageRecord(
+                    source_relative_path,
+                    ROOT_RELATIVE_PATH,
+                    source_relative_path,
+                    ".png",
+                    1,
+                    1.0,
+                ),
+            )
+        database.upsert_image(
+            root_id,
+            ImageRecord("missing.png", ".", "missing.png", ".png", 1, 1.0),
+        )
+
+        missing_count = database.mark_missing_images(root_id, active_paths)
+
+        assert missing_count == 1
+        assert [
+            image.source_relative_path
+            for image in database.list_images(root_id, status="missing")
+        ] == ["missing.png"]
 
 
 def test_list_images_includes_descendant_folders_by_default(tmp_path: Path) -> None:
